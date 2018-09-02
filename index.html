@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <meta http-equiv='X-UA-Compatible' content='ie=edge'>
+    <title>Spiral show</title>
+    <style>
+        * {
+            margin: 0px;
+            padding: 0px;
+        }
+
+        html, body {
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+    <canvas id='canvas'></canvas>
+    <script>
+        class Particle {
+            constructor({ x, y, color, drawer }) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.drawer = drawer;
+
+                this.velocity = {
+                    x: 0,
+                    y: 0
+                }
+
+                this.counter = 0;
+            }
+
+            move() {
+                this.x += this.velocity.x;
+                this.y += this.velocity.y;
+            }
+
+            draw() {
+                this.drawer.draw({
+                    type: this.type,
+                    x: this.x,
+                    y: this.y,
+                    color: `rgba(${this.color.red}, ${this.color.green}, ${this.color.blue}, ${this.color.opacity})`,
+                    ...this.getSpecificProps()
+                })
+            }
+
+            setSpiralOpts(opts) {
+                const {
+                    circleCenter,
+                    circleRadius,
+                    stepIncreaseRadius,
+                    spiralDirection
+                } = opts;
+
+                this.circleCenter = circleCenter;
+                this.circleRadius = circleRadius;
+                this.stepIncreaseRadius = stepIncreaseRadius;
+                this.spiralDirection = spiralDirection;
+            }
+
+            spiralMove() {
+                const angle = this.spiralDirection * (this.counter++ / 10);
+                const radius = this.circleRadius + this.stepIncreaseRadius;
+                const shiftX = this.circleRadius * Math.cos(angle);
+                const shiftY = this.circleRadius * Math.sin(angle);
+
+                this.x = this.circleCenter.x + shiftX;
+                this.y = this.circleCenter.y + shiftY;
+
+                this.circleRadius += this.stepIncreaseRadius;
+            }
+
+            setVelocity({ x, y }) {
+                this.velocity.x = x;
+                this.velocity.y = y;
+            }
+
+            decreaseColor() {
+                this.color.opacity -= 0.005;
+            }
+        }
+
+        Particle.TYPES = {
+            CIRCLE: 'CIRCLE'
+        };
+
+        class CircleParticle extends Particle {
+            constructor({ x, y, radius, color, drawer }) {
+                super({ x, y, color, drawer });
+
+                this.type = Particle.TYPES.CIRCLE;
+                this.radius = radius;
+            }
+
+            getSpecificProps() {
+                return {
+                    radius: this.radius
+                };
+            }
+        }
+
+        class Drawer {
+            constructor(canvas) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+            }
+
+            draw(opts) {
+                const { type, ...drawingOpts } = opts;
+
+                switch (type) {
+                    case Particle.TYPES.CIRCLE: {
+                        return this.drawCircle(drawingOpts);
+
+                        break;
+                    }
+                }
+
+                throw 'wrong shape type';
+            }
+
+            drawCircle(opts) {
+                const {
+                    type,
+                    x,
+                    y,
+                    color,
+                    radius
+                } = opts;
+
+                this.ctx.beginPath();
+                this.ctx.arc(x, y, radius, 0, 2 * Math.PI);
+                this.ctx.fillStyle = color;
+                this.ctx.fill();
+            }
+
+            clearCanvas() {
+                // this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.005)';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+        }
+
+        class Game {
+            constructor(canvas) {
+                this.drawer = new Drawer(canvas);
+
+                this.particles = [];
+            }
+
+            addParticle({ color, circleCenter }) {
+                const circleParticle = new CircleParticle({
+                    x: 200,
+                    y: 200,
+                    radius: Math.random() * 10,
+                    color,
+                    drawer: this.drawer
+                });
+
+                circleParticle.setVelocity({
+                    x: 1,
+                    y: 1
+                });
+
+                circleParticle.setSpiralOpts({
+                    circleCenter: circleCenter || {
+                        x: 200,
+                        y: 200
+                    },
+                    circleRadius: 8 + Math.random() * 10,
+                    stepIncreaseRadius: 0.4 + Math.random() / 3,
+                    spiralDirection: Math.random() > 0.5 ? 1 : -1
+                });
+
+                this.particles.push(circleParticle);
+            }
+
+            start(freq) {
+                this.startTimer(freq);
+            }
+
+            stop() {
+                this.stopTimer();
+            }
+
+            startTimer(freq) {
+                this.interval = setInterval(this.iteration.bind(this), 1000 / freq);
+            }
+
+            stopTimer() {
+                clearInterval(this.interval);
+            }
+
+            iteration() {
+                this.drawer.clearCanvas();
+
+                this.particles.forEach(particle => {
+                    particle.spiralMove();
+                    particle.draw();
+                    particle.decreaseColor();
+
+                    if (particle.color.opacity < 0.05) {
+                        particle.toRemove = true;
+                    }
+                });
+
+                this.particles = this.particles.filter(p => !p.toRemove);
+            }
+        }
+
+        const canvas = document.getElementById('canvas');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const game = new Game(canvas);
+
+        game.start(60);
+
+        canvas.onclick = event => {
+            game.addParticle({
+                color: {
+                    red: Math.round(Math.random() * 255),
+                    green: Math.round(Math.random() * 255),
+                    blue: Math.round(Math.random() * 255),
+                    opacity: 1
+                },
+                circleCenter: {
+                    x: event.clientX,
+                    y: event.clientY
+                }
+            });
+        }
+
+        setInterval(() => {
+            game.addParticle({
+                color: {
+                    red: Math.round(Math.random() * 255),
+                    green: Math.round(Math.random() * 255),
+                    blue: Math.round(Math.random() * 255),
+                    opacity: 1
+                },
+                circleCenter: {
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height
+                }
+            });
+        }, 1000 / 30)
+    </script>
+</body>
+</html>
